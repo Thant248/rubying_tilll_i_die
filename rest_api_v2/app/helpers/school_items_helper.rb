@@ -1,0 +1,2 @@
+module SchoolItemsHelper
+end
