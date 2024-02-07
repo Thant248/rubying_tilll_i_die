@@ -1,2 +1,0 @@
-class SchoolItem < ApplicationRecord
-end

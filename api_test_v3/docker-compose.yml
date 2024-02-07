@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  web:
+    build: .
+    ports:
+      - "4000:4000"  # Change the port mapping to use 4000
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    environment:
+      RAILS_ENV: production
+      DATABASE_URL: mysql2://root:thants@db/article_produ
+  db:
+    image: mysql:latest
+    ports:
+      - "3307:3306"  # This remains unchanged
+    environment:
+      MYSQL_ROOT_PASSWORD: thants
+      MYSQL_DATABASE: article_produ
