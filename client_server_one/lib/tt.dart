@@ -1,11 +1,11 @@
+import 'dart:convert';
+
 import 'package:client_server/WebSocketService.dart';
 import 'package:client_server/direct_message.dart';
 import 'package:flutter/material.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 
-void main() {
-  runApp(MyApp());
-}
 
 class MyApp extends StatelessWidget {
   @override
@@ -31,13 +31,43 @@ class _ChatScreenState extends State<ChatScreen> {
   final WebSocketService _webSocketService = WebSocketService();
   final TextEditingController _controller = TextEditingController();
   List<String> _messages = [];
+  WebSocketChannel? _channel;
+
+  void connectWebSocket() {
+    const url = 'ws://localhost:3000/cable?user_id=1';
+    _channel = WebSocketChannel.connect(Uri.parse(url));
+
+// Subscribe to the "ChatChannel"
+    final subscriptionMessage = jsonEncode({
+      'command': 'subscribe',
+      'identifier': jsonEncode({'channel': 'ChatChannel'}),
+    });
+
+    _channel!.sink.add(subscriptionMessage);
+
+    _channel!.stream.listen(
+      (message) {
+        var parsedMessage = jsonDecode(message) as Map<String, dynamic>;
+        var directmsg = parsedMessage['message']['message']['directmsg'];
+
+        setState(() {
+          _messages.add(directmsg);
+        });
+      },
+      onDone: () {
+        print('WebSocket connection closed');
+      },
+      onError: (error) {
+        print('WebSocket error: $error');
+      },
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _webSocketService.connect(1);
+    connectWebSocket();
     _loadMessages();
-
   }
 
   @override
@@ -48,9 +78,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadMessages() async {
     try {
-      DirectMessages messages = await _webSocketService.fetchdata();
+      DirectMessages messages = await _webSocketService.fetchData();
       setState(() {
-        _messages = messages.tDirectMessages!.map((e) => e.directmsg.toString(),).toList();
+        _messages = messages.tDirectMessages!
+            .map((e) => e.directmsg.toString())
+            .toList();
       });
     } catch (e) {
       print('Failed to fetch messages: $e');
@@ -59,10 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() async {
     List<Map<String, String>> files = [
-      {
-        "mime": "",
-        "data": ""
-      }
+      {"mime": "", "data": ""}
     ];
     Map<String, dynamic> body = {
       "message": _controller.text,
@@ -71,9 +100,9 @@ class _ChatScreenState extends State<ChatScreen> {
       "file": files
     };
 
-    // Send message to WebSocket and save to database
+// Send message to WebSocket and save to database
     _webSocketService.sendMessage(body);
-    // await _webSocketService.sendmessagetodb(body);
+    await _webSocketService.sendMessageToDb(body);
 
     setState(() {
       _messages.add(_controller.text);
