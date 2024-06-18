@@ -7,6 +7,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_frontend/const/permissions.dart';
+import 'package:flutter_frontend/model/groupMessage.dart';
+import 'package:flutter_frontend/screens/Mention/MentionWidget/group_mention.dart';
 import 'package:flutter_frontend/services/file_upload/download_file_web.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
@@ -195,6 +197,19 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
 
   @override
   Widget build(BuildContext context) {
+
+
+    Map<int, List<TDirectMessages>> groupedMessages = {};
+
+              tDirectMessages!.forEach((message) {
+                int messageId = message.id ?? 0 ;
+                if (!groupedMessages.containsKey(messageId)) {
+                  groupedMessages[messageId] = [];
+          
+                }
+
+                groupedMessages[messageId]!.add(message);
+              },);
     return Scaffold(
       backgroundColor: kPriamrybackground,
       resizeToAvoidBottomInset: true,
@@ -269,25 +284,36 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
         children: [
           Expanded(
               child: ListView.builder(
-            itemCount: tDirectMessages?.length ?? 0,
+            itemCount: groupedMessages.length,
             itemBuilder: (context, index) {
               if (tDirectMessages == null || tDirectMessages!.isEmpty) {
                 return Container(); // Return an empty container if the list is null or empty
               }
 
               var channelStar = tDirectMessages!;
+
+              
+
+              List<TDirectMessages> currentMessages = groupedMessages.values.toList()[index];
+
+          // Extract files for all messages in the current group
+          List<String>? files = [];
+          currentMessages.forEach((message) {
+            if (message.fileUrl is String) {
+              files.add(message.fileUrl!);
+            } else if (message.fileUrl is List) {
+              files.addAll(message.fileUrl as List<String>);
+            }
+          });
+
+              
+
+
               List<int> tempStar = tempStarMsgids?.toList() ?? [];
               bool isStared = tempStar.contains(channelStar[index].id);
 
               String message = channelStar[index].directmsg ?? "";
-              List<String>? files;
-              if (channelStar[index].fileUrl is String) {
-                files = [channelStar[index].fileUrl!];
-              } else if (channelStar[index].fileUrl is List) {
-                files = channelStar[index].fileUrl as List<String>;
-              } else {
-                files = null;
-              }
+          
 
               int count = channelStar[index].count ?? 0;
               String time = channelStar[index].createdAt.toString();
@@ -867,30 +893,47 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
   }
 
   Widget _buildMultipleFiles(List<String?> files) {
-    List<String?> images = files.where((file) => _isImage(file!)).toList();
-    List<String?> others = files.where((file) => !_isImage(file!)).toList();
+  List<String?> images = files.where((file) => _isImage(file!)).toList();
+  List<String?> others = files.where((file) => !_isImage(file!)).toList();
 
-    return Column(
-      children: [
-        const SizedBox(
-          height: 8,
-        ),
-        if (images.isNotEmpty)
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1,
-            ),
-            itemCount: images.length,
-            itemBuilder: (context, index) {
-              return Stack(
+  return Column(
+    children: [
+      const SizedBox(height: 8),
+      if (images.isNotEmpty)
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 1,
+          ),
+          itemCount: images.length,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: Stack(
                 children: [
-                  Container(
-                    width: MediaQuery.of(context).size.width * 0.5,
-                    height: MediaQuery.of(context).size.height * 0.3,
-                    child: Image.network(images[index]!, fit: BoxFit.cover),
+                  Positioned.fill(
+                    child: Image.network(
+                      images[index]!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Center(
+                          child: Icon(Icons.error, color: Colors.red),
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                   Positioned(
                     top: 8,
@@ -904,7 +947,7 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                             await DownloadFileWeb.downloadFile(
                                 images[index]!, filename);
                           } else {
-                            permissionReady =
+                            bool permissionReady =
                                 await permissions.checkPermission();
                             if (permissionReady) {
                               await _prepareSaveDir();
@@ -924,32 +967,31 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        const SizedBox(
-          height: 8,
+              ),
+            );
+          },
         ),
-        if (others.isNotEmpty)
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 1,
-              childAspectRatio: 5,
-            ),
-            itemCount: others.length,
-            itemBuilder: (context, index) {
-              String? fileUrl = others[index];
-              final isExcel = _isExcel(fileUrl!);
-              final isTxt = _isTxt(fileUrl);
-              final isPdf = _isPdf(fileUrl);
-              return _buildFileContainer(fileUrl, isExcel, isTxt, isPdf);
-            },
+      const SizedBox(height: 8),
+      if (others.isNotEmpty)
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 1,
+            childAspectRatio: 5,
           ),
-      ],
-    );
-  }
+          itemCount: others.length,
+          itemBuilder: (context, index) {
+            String? fileUrl = others[index];
+            final isExcel = _isExcel(fileUrl!);
+            final isTxt = _isTxt(fileUrl);
+            final isPdf = _isPdf(fileUrl);
+            return _buildFileContainer(fileUrl, isExcel, isTxt, isPdf);
+          },
+        ),
+    ],
+  );
+}
 
   Widget _buildFileContainer(
       String fileUrl, bool isExcel, bool isTxt, bool isPdf) {
