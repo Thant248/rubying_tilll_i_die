@@ -107,16 +107,16 @@ class MUser {
 class TDirectMessages {
   String? name;
   String? directmsg;
-  String? fileUrl;
+  List<dynamic>? fileUrls;
   int? id;
   String? createdAt;
   int? count;
   TDirectMessages(
-      {this.name, this.directmsg, this.id, this.createdAt, this.count, this.fileUrl});
+      {this.name, this.directmsg, this.id, this.createdAt, this.count, this.fileUrls});
   TDirectMessages.fromJson(Map<String, dynamic> json) {
     name = json['name'];
     directmsg = json['directmsg'];
-    fileUrl = json['file_url'];
+    fileUrls = json['file_urls'] as List<dynamic>?;
     id = json['id'];
     createdAt = json['created_at'];
     count = json['count'];
@@ -125,7 +125,7 @@ class TDirectMessages {
     final Map<String, dynamic> data = new Map<String, dynamic>();
     data['name'] = this.name;
     data['directmsg'] = this.directmsg;
-    data['file_url'] = this.fileUrl;
+    data['file_urls'] = this.fileUrls;
     data['id'] = this.id;
     data['created_at'] = this.createdAt;
     data['count'] = this.count;

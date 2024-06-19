@@ -7,8 +7,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_frontend/const/permissions.dart';
-import 'package:flutter_frontend/model/groupMessage.dart';
-import 'package:flutter_frontend/screens/Mention/MentionWidget/group_mention.dart';
 import 'package:flutter_frontend/services/file_upload/download_file_web.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
@@ -50,6 +48,11 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
   List<TempDirectStarMsgids>? tempDirectStarMsgids = [];
   List<int>? tempStarMsgids = [];
   WebSocketChannel? _channel;
+  final String ipAddress = "192.168.2.79";
+
+  String replaceMinioWithIP(String url, String ipAddress) {
+    return url.replaceAll("http://minio:9000", "http://$ipAddress:9000");
+  }
 
   final _apiService = ApiService(Dio(BaseOptions(headers: {
     'Content-Type': 'application/json',
@@ -65,13 +68,14 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
   List<PlatformFile> files = [];
   late String localpath;
   late bool permissionReady;
-  late TargetPlatform platform;
+   TargetPlatform? platform;
   final PermissionClass permissions = PermissionClass();
   String? fileText;
 
   @override
   void initState() {
     super.initState();
+    
     loadMessages();
     connectWebSocket();
     if (kIsWeb) {
@@ -137,20 +141,24 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
         int id = msg['id'];
         var date = msg['created_at'];
         String send = parsedMessage['message']['sender_name'];
-        String? fileUrl;
+        List<dynamic>? fileUrls = [];
         if (parsedMessage['message']['files'] != null) {
-          var files = parsedMessage['message']['files'] as List;
-          fileUrl = files.map((file) => file['file'] as String).join(', ');
+          var files = parsedMessage['message']['files'];
+          fileUrls = files.map((file) => file['file']).toList();
         }
-        print(fileUrl);
+        int messagedId = parsedMessage['message']['messaged_star']['directmsgid'];
+        print("thisis the apppp ${messagedId}");
         setState(() {
           tDirectMessages!.add(TDirectMessages(
               id: id,
               directmsg: dircetmsg,
               createdAt: date,
               name: send,
-              fileUrl: fileUrl));
+              fileUrls: fileUrls));
         });
+        tempStarMsgids!.add(messagedId);
+
+
       },
       onDone: () {
         print('WebSocket connection closed');
@@ -197,19 +205,6 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
 
   @override
   Widget build(BuildContext context) {
-
-
-    Map<int, List<TDirectMessages>> groupedMessages = {};
-
-              tDirectMessages!.forEach((message) {
-                int messageId = message.id ?? 0 ;
-                if (!groupedMessages.containsKey(messageId)) {
-                  groupedMessages[messageId] = [];
-          
-                }
-
-                groupedMessages[messageId]!.add(message);
-              },);
     return Scaffold(
       backgroundColor: kPriamrybackground,
       resizeToAvoidBottomInset: true,
@@ -284,36 +279,21 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
         children: [
           Expanded(
               child: ListView.builder(
-            itemCount: groupedMessages.length,
+            itemCount: tDirectMessages!.length,
             itemBuilder: (context, index) {
               if (tDirectMessages == null || tDirectMessages!.isEmpty) {
-                return Container(); // Return an empty container if the list is null or empty
+                return Container();
               }
 
               var channelStar = tDirectMessages!;
 
-              
-
-              List<TDirectMessages> currentMessages = groupedMessages.values.toList()[index];
-
-          // Extract files for all messages in the current group
-          List<String>? files = [];
-          currentMessages.forEach((message) {
-            if (message.fileUrl is String) {
-              files.add(message.fileUrl!);
-            } else if (message.fileUrl is List) {
-              files.addAll(message.fileUrl as List<String>);
-            }
-          });
-
-              
-
+              List<dynamic>? files = [];
+              files = tDirectMessages![index].fileUrls;
 
               List<int> tempStar = tempStarMsgids?.toList() ?? [];
               bool isStared = tempStar.contains(channelStar[index].id);
 
               String message = channelStar[index].directmsg ?? "";
-          
 
               int count = channelStar[index].count ?? 0;
               String time = channelStar[index].createdAt.toString();
@@ -442,10 +422,11 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                                             color: Color.fromARGB(255, 0, 0, 0),
                                           ),
                                         ),
-                                      if (files != null && files.isNotEmpty)
-                                        ...files.length == 1
-                                            ? [_buildSingleFile(files.first)]
-                                            : [_buildMultipleFiles(files)],
+                                      if (files!.length == 1)
+                                        _buildSingleFile(files![0]),
+                                      if (files!.length > 2)
+                                        _buildMultipleFiles(files),
+                                      const SizedBox(height: 8),
                                       const SizedBox(height: 8),
                                       Text(
                                         created_at,
@@ -840,7 +821,14 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
     final isTxt = _isTxt(fileUrl);
     final isPdf = _isPdf(fileUrl);
 
-    String filename = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+    String modifiedUrl;
+
+      if(platform == TargetPlatform.android) {
+        modifiedUrl = replaceMinioWithIP(fileUrl, ipAddress);
+      } else {
+        modifiedUrl = fileUrl;
+      }
+              
 
     if (isImage) {
       return Column(
@@ -851,10 +839,48 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
           Stack(
             alignment: Alignment.topRight,
             children: [
-              Container(
-                width: MediaQuery.of(context).size.width * 0.5,
-                height: MediaQuery.of(context).size.height * 0.3,
-                child: Image.network(fileUrl, fit: BoxFit.cover),
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Dialog(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.9,
+                          maxHeight: MediaQuery.of(context).size.height * 0.9,
+                        ),
+                        child: Stack(children: [
+                          Image.network(modifiedUrl, fit: BoxFit.contain),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.5,
+                  height: MediaQuery.of(context).size.height * 0.3,
+                  child: Image.network(modifiedUrl, fit: BoxFit.cover),
+                ),
               ),
               Positioned(
                 top: 8,
@@ -862,24 +888,22 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                 child: InkWell(
                   onTap: () async {
                     try {
-                      if (kIsWeb) {
-                        await DownloadFileWeb.downloadFile(fileUrl, filename);
-                      } else {
-                        permissionReady = await permissions.checkPermission();
-                        if (permissionReady) {
-                          await _prepareSaveDir();
-                          await Dio().download(fileUrl, filename);
-                          print("Download Completed.");
-                        }
-                      }
+                      await DownloadFile.downloadFile(
+                          modifiedUrl, modifiedUrl.split('/').last, context);
                     } catch (e) {
                       print("Download Failed.\n\n$e");
                     }
                   },
-                  child: const Icon(
-                    Icons.download,
-                    color: Colors.white,
-                    size: 24,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.download,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
@@ -888,51 +912,83 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
         ],
       );
     } else {
-      return _buildFileContainer(fileUrl, isExcel, isTxt, isPdf);
+      return _buildFileContainer(modifiedUrl, isExcel, isTxt, isPdf);
     }
   }
 
-  Widget _buildMultipleFiles(List<String?> files) {
-  List<String?> images = files.where((file) => _isImage(file!)).toList();
-  List<String?> others = files.where((file) => !_isImage(file!)).toList();
+  Widget _buildMultipleFiles(List<dynamic> files) {
+    List<dynamic> images = files.where((file) => _isImage(file!)).toList();
+    List<dynamic> others = files.where((file) => !_isImage(file!)).toList();
 
-  return Column(
-    children: [
-      const SizedBox(height: 8),
-      if (images.isNotEmpty)
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 1,
-          ),
-          itemCount: images.length,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.all(4.0),
-              child: Stack(
+    String modifiedUrl;
+
+    return Column(
+      children: [
+        const SizedBox(
+          height: 8,
+        ),
+        if (images.isNotEmpty)
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 1,
+            ),
+            itemCount: images.length,
+            itemBuilder: (context, index) {
+              
+              if(platform == TargetPlatform.android) {
+                modifiedUrl = replaceMinioWithIP(images[index]!, ipAddress);
+              } else {
+                modifiedUrl = images[index]!;
+              }
+              
+              return Stack(
                 children: [
-                  Positioned.fill(
-                    child: Image.network(
-                      images[index]!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Center(
-                          child: Icon(Icons.error, color: Colors.red),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
-                                : null,
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => Dialog(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: MediaQuery.of(context).size.width * 0.9,
+                              maxHeight:
+                                  MediaQuery.of(context).size.height * 0.9,
+                            ),
+                            child: Stack(children: [
+                              Image.network(modifiedUrl,
+                                  fit: BoxFit.contain),
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ]),
                           ),
-                        );
-                      },
+                        ),
+                      );
+                    },
+                    child: Container(
+                      width: MediaQuery.of(context).size.width * 0.5,
+                      height: MediaQuery.of(context).size.height * 0.3,
+                      child: Image.network(modifiedUrl, fit: BoxFit.cover),
                     ),
                   ),
                   Positioned(
@@ -940,84 +996,70 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                     right: 8,
                     child: InkWell(
                       onTap: () async {
-                        String filename = images[index]!
-                            .substring(images[index]!.lastIndexOf("/") + 1);
                         try {
-                          if (kIsWeb) {
-                            await DownloadFileWeb.downloadFile(
-                                images[index]!, filename);
-                          } else {
-                            bool permissionReady =
-                                await permissions.checkPermission();
-                            if (permissionReady) {
-                              await _prepareSaveDir();
-                              await Dio().download(images[index]!, filename);
-                              print("Download Completed.");
-                            }
-                          }
+                          await DownloadFile.downloadFile(modifiedUrl,
+                              modifiedUrl.split('/').last, context);
                         } catch (e) {
                           print("Download Failed.\n\n$e");
                         }
                       },
-                      child: const Icon(
-                        Icons.download,
-                        color: Colors.white,
-                        size: 24,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(
+                          Icons.download,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
                     ),
                   ),
                 ],
-              ),
-            );
-          },
-        ),
-      const SizedBox(height: 8),
-      if (others.isNotEmpty)
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 1,
-            childAspectRatio: 5,
+              );
+            }
           ),
-          itemCount: others.length,
-          itemBuilder: (context, index) {
-            String? fileUrl = others[index];
-            final isExcel = _isExcel(fileUrl!);
-            final isTxt = _isTxt(fileUrl);
-            final isPdf = _isPdf(fileUrl);
-            return _buildFileContainer(fileUrl, isExcel, isTxt, isPdf);
-          },
+        const SizedBox(
+          height: 8,
         ),
-    ],
-  );
-}
+        if (others.isNotEmpty)
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: others.length,
+            itemBuilder: (context, index) {
+              String? fileUrl = others[index];
+              if(platform == TargetPlatform.android) {
+                modifiedUrl = replaceMinioWithIP(fileUrl!, ipAddress);
+              } else {
+                modifiedUrl = fileUrl!;
+              }
+              
+              final isExcel = _isExcel(modifiedUrl);
+              final isTxt = _isTxt(modifiedUrl);
+              final isPdf = _isPdf(modifiedUrl);
+              return _buildFileContainer(modifiedUrl, isExcel, isTxt, isPdf);
+            },
+          ),
+      ],
+    );
+  }
 
   Widget _buildFileContainer(
       String fileUrl, bool isExcel, bool isTxt, bool isPdf) {
-    return Container(
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(5)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          isExcel
-              ? Container(
-                  padding: const EdgeInsets.all(5),
-                  alignment: Alignment.center,
-                  height: 20,
-                  width: 20,
-                  decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: Colors.green),
-                  child: const Text(
-                    "E",
-                    style: TextStyle(color: Colors.white, fontSize: 10),
-                  ),
-                )
-              : isTxt
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(5)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              isExcel
                   ? Container(
                       padding: const EdgeInsets.all(5),
                       alignment: Alignment.center,
@@ -1025,13 +1067,13 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                       width: 20,
                       decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(8),
-                          color: Colors.blue),
+                          color: Colors.green),
                       child: const Text(
-                        "T",
+                        "E",
                         style: TextStyle(color: Colors.white, fontSize: 10),
                       ),
                     )
-                  : isPdf
+                  : isTxt
                       ? Container(
                           padding: const EdgeInsets.all(5),
                           alignment: Alignment.center,
@@ -1039,35 +1081,64 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                           width: 20,
                           decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(8),
-                              color: Colors.red),
+                              color: Colors.blue),
                           child: const Text(
-                            "P",
+                            "T",
                             style: TextStyle(color: Colors.white, fontSize: 10),
                           ),
                         )
-                      : const Icon(Icons.description),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  fileUrl,
-                  softWrap: true,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.bold),
+                      : isPdf
+                          ? Container(
+                              padding: const EdgeInsets.all(5),
+                              alignment: Alignment.center,
+                              height: 20,
+                              width: 20,
+                              decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.red),
+                              child: const Text(
+                                "P",
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 10),
+                              ),
+                            )
+                          : const Icon(Icons.description),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fileUrl,
+                      softWrap: true,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                    const Text(
+                      "Download to get file",
+                      style: TextStyle(fontSize: 10),
+                    )
+                  ],
                 ),
-                const Text(
-                  "Download to get file",
-                  style: TextStyle(fontSize: 10),
-                )
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.download,
+                  color: Colors.black,
+                  size: 20,
+                ),
+                onPressed: () async {
+                  await DownloadFile.downloadFile(
+                      fileUrl, fileUrl.split('/').last, context);
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1091,3 +1162,4 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
     return fileUrl.endsWith('.pdf');
   }
 }
+
