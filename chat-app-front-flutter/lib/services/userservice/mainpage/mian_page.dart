@@ -4,7 +4,7 @@ import 'package:retrofit/http.dart';
 
 part 'mian_page.g.dart';
 
-@RestApi(baseUrl: 'http://localhost:3000/main')
+@RestApi(baseUrl: 'http://192.168.2.79:3000/main')
 abstract class MainPageService {
   factory MainPageService(Dio dio) => _MainPageService(dio);
 

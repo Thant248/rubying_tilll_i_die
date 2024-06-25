@@ -35,7 +35,7 @@ dependencies:
   shared_preferences: 
   retrofit: 
   provider: ^5.0.0
-  lottie: ^3.1.0
+  lottie: ^3.0.0
   mailer: ^6.1.0
  
   popover: ^0.3.0
@@ -60,6 +60,9 @@ dependencies:
   permission_handler: ^11.3.1
   path_provider: ^2.1.3
   html: ^0.15.4
+  image_gallery_saver: ^2.0.3
+  gallery: ^0.0.4
+  gallery_saver:
 
 dev_dependencies:
   flutter_test:

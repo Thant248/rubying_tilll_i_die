@@ -11,7 +11,7 @@ class AuthController {
       String name, String password, String workspaceName, BuildContext context) async {
     
       final response = await http.post(
-          Uri.parse('http://localhost:3000/login'),
+          Uri.parse('http://192.168.2.79:3000/login'),
           headers: <String, String>{
             'Content-Type': 'application/json',
             'Accept': 'application/json'

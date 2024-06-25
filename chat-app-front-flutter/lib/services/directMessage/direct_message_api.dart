@@ -14,26 +14,10 @@ import 'package:dio/dio.dart';
 import 'package:mime/mime.dart';
 
 class DirectMessageService {
-   
-   WebsocketService _websocketService = WebsocketService();
+     
 
   final _apiSerive = ApiService(Dio(BaseOptions(headers: {'Content-Type': 'application/json', 'Accept': 'application/json'})));
-  // Future<void> sendDirectMessage(int receiverUserId, String message) async {
-  //   int currentUserId = SessionStore.sessionData!.currentUser!.id!.toInt();
-  //   Map<String, dynamic> requestBody = {
-  //     "message": message,
-  //     "user_id": currentUserId,
-  //     "s_user_id": receiverUserId
-  //   };
-
-  //   try {
-  //     var token = await AuthController().getToken();
-  //     await _apiSerive.sendMessage(requestBody, token!);
-  //      _websocketService.sendMessageToWs(requestBody);
-  //   } catch (e) {
-  //     throw e;
-  //   }
-  // }
+  
 
   Future<void> sendDirectMessage(
       int receiverUserId, String message, List<PlatformFile>? files) async {
@@ -64,7 +48,7 @@ class DirectMessageService {
       }
       var token = await AuthController().getToken();
       await _apiSerive.sendMessage(requestBody, token!);
-      _websocketService.sendMessageToWs(requestBody);
+      // _websocketService.sendMessageToWs(requestBody);
     } catch (e) {
       rethrow;
     }
@@ -73,16 +57,34 @@ class DirectMessageService {
 
 
   Future<void> sendDirectMessageThread(
-      int directMsgId, int receiveUserId, String message) async {
+      int directMsgId, int receiveUserId, String message, List<PlatformFile>? files) async {
     String url = "http://localhost:3000/directthreadmsg";
     int currentUserId = SessionStore.sessionData!.currentUser!.id!.toInt();
     Map<String, dynamic> requestBody = {
       "s_direct_message_id": directMsgId,
       "s_user_id": receiveUserId,
       "message": message,
-      "user_id": currentUserId
+      "user_id": currentUserId,
+      "files": []
     };
     try {
+      if (files != null) {
+        for (PlatformFile file in files) {
+          if (kIsWeb) {
+            Uint8List fileBytes = file.bytes!;
+            String base64Data = base64Encode(fileBytes);
+            String? mimeType =
+                lookupMimeType(file.name, headerBytes: fileBytes);
+            requestBody["files"].add({"data": base64Data, "mime": mimeType});
+          } else {
+            String? filePath = file.path;
+            String mimeType = await MimeType.checkMimeType(filePath!);
+            String base64String =
+                await MimeType.changeToBase64(filePath);
+            requestBody["files"].add({"data": base64String, "mime": mimeType});
+          }
+        }
+      }
       var token = await AuthController().getToken();
       var response = await http.post(Uri.parse(url),
           headers: {

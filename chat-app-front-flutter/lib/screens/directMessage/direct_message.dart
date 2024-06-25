@@ -68,14 +68,14 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
   List<PlatformFile> files = [];
   late String localpath;
   late bool permissionReady;
-   TargetPlatform? platform;
+  TargetPlatform? platform;
   final PermissionClass permissions = PermissionClass();
   String? fileText;
 
   @override
   void initState() {
     super.initState();
-    
+
     loadMessages();
     connectWebSocket();
     if (kIsWeb) {
@@ -133,39 +133,91 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
     });
 
     _channel!.sink.add(subscriptionMessage);
+
     _channel!.stream.listen(
       (message) {
-        var parsedMessage = jsonDecode(message) as Map<String, dynamic>;
-        var msg = parsedMessage['message']['message'];
-        var dircetmsg = msg['directmsg'];
-        int id = msg['id'];
-        var date = msg['created_at'];
-        String send = parsedMessage['message']['sender_name'];
-        List<dynamic>? fileUrls = [];
-        if (parsedMessage['message']['files'] != null) {
-          var files = parsedMessage['message']['files'];
-          fileUrls = files.map((file) => file['file']).toList();
-        }
-        int messagedId = parsedMessage['message']['messaged_star']['directmsgid'];
-        print("thisis the apppp ${messagedId}");
-        setState(() {
-          tDirectMessages!.add(TDirectMessages(
-              id: id,
-              directmsg: dircetmsg,
-              createdAt: date,
-              name: send,
-              fileUrls: fileUrls));
-        });
-        tempStarMsgids!.add(messagedId);
+        try {
+          var parsedMessage = jsonDecode(message) as Map<String, dynamic>;
 
+          if (parsedMessage.containsKey('type') &&
+              parsedMessage['type'] == 'ping') {
+            return;
+          }
 
+          if (parsedMessage.containsKey('message')) {
+            var messageContent = parsedMessage['message'];
+
+            // Handling chat message
+            if (messageContent != null &&
+                messageContent.containsKey('message')) {
+              var msg = messageContent['message'];
+
+              if (msg != null && msg.containsKey('directmsg')) {
+                var directmsg = msg['directmsg'];
+                int id = msg['id'];
+                var date = msg['created_at'];
+                String send = messageContent['sender_name'];
+                List<dynamic> fileUrls = [];
+
+                if (messageContent.containsKey('files')) {
+                  var files = messageContent['files'];
+                  if (files != null) {
+                    fileUrls = files.map((file) => file['file']).toList();
+                  }
+                }
+
+                setState(() {
+                  tDirectMessages!.add(TDirectMessages(
+                    id: id,
+                    directmsg: directmsg,
+                    createdAt: date,
+                    name: send,
+                    fileUrls: fileUrls,
+                  ));
+                });
+              } else {}
+            }
+            // Handling message star
+            else if (messageContent.containsKey('messaged_star')) {
+              var messageStarData = messageContent['messaged_star'];
+
+              if (messageStarData != null) {
+                var starId = messageStarData['id'];
+                var directMsgId = messageStarData['directmsgid'];
+
+                setState(() {
+                  tempDirectStarMsgids!.add(TempDirectStarMsgids(
+                      directmsgid: directMsgId, id: starId));
+                  tempStarMsgids!.add(directMsgId);
+                });
+              } else {}
+            } else if (messageContent.containsKey('unstared_message')) {
+              var unstaredMsg = messageContent['unstared_message'];
+
+              var directmsgid = unstaredMsg['directmsgid'];
+
+              setState(() {
+                tempStarMsgids
+                    ?.removeWhere((element) => element == directmsgid);
+                tempDirectStarMsgids?.removeWhere(
+                    (element) => element.directmsgid == directmsgid);
+              });
+            } else {
+              var deletemsg = messageContent['delete_msg'];
+              var id = deletemsg['id'];
+              var directmsg = deletemsg['directmsg'];
+
+              setState(() {
+                tDirectMessages?.removeWhere((element) => element.id == id);
+                tempDirectStarMsgids?.removeWhere(
+                    (element) => element.directmsgid == directmsg);
+              });
+            }
+          } else {}
+        } catch (e) {}
       },
-      onDone: () {
-        print('WebSocket connection closed');
-      },
-      onError: (error) {
-        print('WebSocket error: $error');
-      },
+      onDone: () {},
+      onError: (error) {},
     );
   }
 
@@ -304,6 +356,8 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
               bool isMessageFromCurrentUser =
                   currentUserName == channelStar[index].name;
               int directMsgIds = channelStar[index].id ?? 0;
+              print("this is connect type");
+              print(platform);
 
               return SingleChildScrollView(
                 child: InkWell(
@@ -358,8 +412,9 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                                                   MaterialPageRoute(
                                                       builder: (_) =>
                                                           DirectMessageThreadWidget(
-                                                              user_status: widget
-                                                                  .user_status,
+                                                              userStatus:
+                                                                  widget
+                                                                      .user_status,
                                                               receiverId:
                                                                   widget.userId,
                                                               directMsgId:
@@ -569,8 +624,9 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                                                   MaterialPageRoute(
                                                       builder: (_) =>
                                                           DirectMessageThreadWidget(
-                                                              user_status: widget
-                                                                  .user_status,
+                                                              userStatus:
+                                                                  widget
+                                                                      .user_status,
                                                               receiverId:
                                                                   widget.userId,
                                                               directMsgId:
@@ -823,12 +879,11 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
 
     String modifiedUrl;
 
-      if(platform == TargetPlatform.android) {
-        modifiedUrl = replaceMinioWithIP(fileUrl, ipAddress);
-      } else {
-        modifiedUrl = fileUrl;
-      }
-              
+    if (platform == TargetPlatform.android) {
+      modifiedUrl = replaceMinioWithIP(fileUrl, ipAddress);
+    } else {
+      modifiedUrl = fileUrl;
+    }
 
     if (isImage) {
       return Column(
@@ -855,21 +910,21 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
                             top: 8,
                             right: 8,
                             child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 24,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                              onTap: () {
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
+                                child: const Icon(
+                                  Icons.close,
+                                  size: 24,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
                           ),
                         ]),
                       ),
@@ -916,12 +971,9 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
     }
   }
 
-  Widget _buildMultipleFiles(List<dynamic> files) {
+   Widget _buildMultipleFiles(List<dynamic> files) {
     List<dynamic> images = files.where((file) => _isImage(file!)).toList();
     List<dynamic> others = files.where((file) => !_isImage(file!)).toList();
-
-    String modifiedUrl;
-
     return Column(
       children: [
         const SizedBox(
@@ -929,97 +981,95 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
         ),
         if (images.isNotEmpty)
           GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1,
-            ),
-            itemCount: images.length,
-            itemBuilder: (context, index) {
-              
-              if(platform == TargetPlatform.android) {
-                modifiedUrl = replaceMinioWithIP(images[index]!, ipAddress);
-              } else {
-                modifiedUrl = images[index]!;
-              }
-              
-              return Stack(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => Dialog(
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.9,
-                              maxHeight:
-                                  MediaQuery.of(context).size.height * 0.9,
-                            ),
-                            child: Stack(children: [
-                              Image.network(modifiedUrl,
-                                  fit: BoxFit.contain),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 24,
-                                      color: Colors.white,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 1,
+              ),
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                String modifiedUrl;
+                if (platform == TargetPlatform.android) {
+                  modifiedUrl = replaceMinioWithIP(images[index]!, ipAddress);
+                } else {
+                  modifiedUrl = images[index]!;
+                }
+                return Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => Dialog(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width * 0.9,
+                                maxHeight:
+                                    MediaQuery.of(context).size.height * 0.9,
+                              ),
+                              child: Stack(children: [
+                                Image.network(modifiedUrl, fit: BoxFit.contain),
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black54,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 24,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ]),
+                              ]),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: MediaQuery.of(context).size.width * 0.5,
-                      height: MediaQuery.of(context).size.height * 0.3,
-                      child: Image.network(modifiedUrl, fit: BoxFit.cover),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: InkWell(
-                      onTap: () async {
-                        try {
-                          await DownloadFile.downloadFile(modifiedUrl,
-                              modifiedUrl.split('/').last, context);
-                        } catch (e) {
-                          print("Download Failed.\n\n$e");
-                        }
+                        );
                       },
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Icons.download,
-                          color: Colors.white,
-                          size: 24,
+                        width: MediaQuery.of(context).size.width * 0.5,
+                        height: MediaQuery.of(context).size.height * 0.3,
+                        child: Image.network(modifiedUrl, fit: BoxFit.cover),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: InkWell(
+                        onTap: () async {
+                          try {
+                            await DownloadFile.downloadFile(modifiedUrl,
+                                modifiedUrl.split('/').last, context);
+                          } catch (e) {
+                            print("Download Failed.\n\n$e");
+                          }
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.download,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            }
-          ),
+                  ],
+                );
+              }),
         const SizedBox(
           height: 8,
         ),
@@ -1030,12 +1080,12 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
             itemCount: others.length,
             itemBuilder: (context, index) {
               String? fileUrl = others[index];
-              if(platform == TargetPlatform.android) {
+              String modifiedUrl;
+              if (platform == TargetPlatform.android) {
                 modifiedUrl = replaceMinioWithIP(fileUrl!, ipAddress);
               } else {
                 modifiedUrl = fileUrl!;
               }
-              
               final isExcel = _isExcel(modifiedUrl);
               final isTxt = _isTxt(modifiedUrl);
               final isPdf = _isPdf(modifiedUrl);
@@ -1162,4 +1212,3 @@ class _DirectMessageWidgetState extends State<DirectMessageWidget>
     return fileUrl.endsWith('.pdf');
   }
 }
-

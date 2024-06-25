@@ -13,7 +13,7 @@ class _MainPageService implements MainPageService {
     this._dio, {
     this.baseUrl,
   }) {
-    baseUrl ??= 'http://localhost:3000/main';
+    baseUrl ??= 'http://192.168.2.79:3000/main';
   }
 
   final Dio _dio;

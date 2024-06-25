@@ -36,7 +36,7 @@ class _ApiService implements ApiService {
     )
             .compose(
               _dio.options,
-              'http://localhost:3000/m_users/${userId}',
+              'http://127.0.0.1:3000/m_users/${userId}',
               queryParameters: queryParameters,
               data: _data,
             )
@@ -67,7 +67,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/directmsg',
+          'http://127.0.0.1:3000/directmsg',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -101,7 +101,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/star',
+          'http://127.0.0.1:3000/star',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -129,7 +129,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/unstar',
+          'http://127.0.0.1:3000/unstar',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -157,7 +157,7 @@ class _ApiService implements ApiService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/delete_directmsg',
+          'http://127.0.0.1:3000/delete_directmsg',
           queryParameters: queryParameters,
           data: _data,
         )

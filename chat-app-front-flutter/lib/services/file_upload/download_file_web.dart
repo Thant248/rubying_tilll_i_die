@@ -1,14 +1,11 @@
 import 'dart:io';
-
 import 'package:dio/dio.dart';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 // import 'dart:html' as html;
-
 import 'package:flutter_frontend/const/permissions.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:gallery_saver/gallery_saver.dart';
 import 'package:path_provider/path_provider.dart';
-
 class DownloadFile {
   static Future<void> downloadFile(
       String fileUrl, String filename, BuildContext context) async {
@@ -38,12 +35,14 @@ class DownloadFile {
             fileUrl.endsWith('.jpeg') ||
             fileUrl.endsWith('.gif') ||
             fileUrl.endsWith('.bmp')) {
-              fullPath = "/sdcard/Download/$filename";
-          await ImageGallerySaver.saveFile(fullPath);
+          await GallerySaver.saveImage(fileUrl, albumName: 'MiMo').then((success) {
+            if(success != null && success) {
+              fullPath = 'saved to gallery';
+            }
+          });
         }
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Download Completed: $fullPath")),
+          SnackBar(content: Text("Download Completed: $fullPath", style: const TextStyle(fontSize: 14),)),
         );
       }
       // }
@@ -53,23 +52,4 @@ class DownloadFile {
       );
     }
   }
-
-  // Future<void> _prepareSaveDir() async {
-  //   String _localPath = (await _findLocalPath())!;
-  //   final savedDir = Directory(_localPath);
-  //   bool hasExisted = await savedDir.exists();
-  //   if (!hasExisted) {
-  //     savedDir.create();
-  //   }
-  // }
-
-  // Future<String?> _findLocalPath() async {
-  //   TargetPlatform? platform;
-  //   if (platform == TargetPlatform.android) {
-  //     return "/sdcard/download/";
-  //   } else {
-  //     var directory = await getApplicationDocumentsDirectory();
-  //     return '${directory.path}${Platform.pathSeparator}Download';
-  //   }
-  // }
 }

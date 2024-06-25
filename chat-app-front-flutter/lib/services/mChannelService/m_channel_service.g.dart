@@ -36,7 +36,7 @@ class _MChannelService implements MChannelService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/m_channels',
+          'http://192.168.2.79:3000/m_channels',
           queryParameters: queryParameters,
           data: _data,
         )
@@ -68,7 +68,7 @@ class _MChannelService implements MChannelService {
     )
         .compose(
           _dio.options,
-          'http://localhost:3000/m_channels/{channelID}',
+          'http://192.168.2.79:3000/m_channels/{channelID}',
           queryParameters: queryParameters,
           data: _data,
         )
